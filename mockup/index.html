@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>allover.art — мокап-редактор (сетка искажения)</title>
+<style>
+  :root{--bg:#0b0d12;--panel:#10141d;--fg:#e8ecf3;--mut:#8b93a7;--acc:#5b8cff;--line:#1e2636}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;min-height:100vh;font:14px/1.45 -apple-system,Segoe UI,Roboto,Inter,sans-serif;
+    background:radial-gradient(1000px 500px at 50% -10%,#15203a,var(--bg));color:var(--fg);
+    display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px}
+  h1{font-size:16px;margin:4px 0 0;font-weight:600}
+  .sub{color:var(--mut);font-size:12.5px;margin:0 0 4px;text-align:center;max-width:560px}
+  #stage{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    background:#0d1017;touch-action:none;max-width:96vw}
+  #stage.drag{outline:2px dashed var(--acc);outline-offset:-6px}
+  canvas{display:block;width:auto;max-width:96vw;max-height:70vh;height:auto}
+  .panel{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-width:96vw}
+  .ctrl{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mut)}
+  button{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:9px;
+    padding:8px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#06122e;font-weight:600}
+  input[type=range]{width:120px}
+  select,input[type=file]{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+  .hint{color:var(--mut);font-size:12px;text-align:center;max-width:560px}
+  .dz{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+  <h1>Мокап-редактор · сетка искажения 🔧👕</h1>
+  <p class="sub">Тащи узлы сетки, чтобы натянуть принт по форме футболки. Принт можно перетащить файлом прямо на холст (drag&amp;drop) или выбрать кнопкой. Наложение идёт только по ткани, с учётом теней.</p>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+  </div>
+
+  <div class="panel">
+    <button id="reset">Сбросить сетку</button>
+    <label class="ctrl">Сетка <input type="checkbox" id="showMesh" checked></label>
+    <label class="ctrl">Колонок <input type="range" id="cols" min="2" max="8" value="4"></label>
+    <label class="ctrl">Строк <input type="range" id="rows" min="2" max="9" value="5"></label>
+    <label class="ctrl">Непрозр. <input type="range" id="opacity" min="0" max="100" value="100"></label>
+    <label class="ctrl">Режим
+      <select id="blend">
+        <option value="multiply" selected>Multiply (ткань)</option>
+        <option value="source-over">Normal</option>
+        <option value="overlay">Overlay</option>
+      </select>
+    </label>
+    <label class="ctrl">Маска ткани <input type="checkbox" id="useMask" checked></label>
+  </div>
+
+  <div class="panel">
+    <label class="ctrl dz">Принт: <input type="file" id="file" accept="image/*"></label>
+    <button id="download" class="primary">⬇ Скачать мокап</button>
+  </div>
+  <p class="hint">Совет: начни с крупной сетки (2×2), грубо натяни по углам футболки, потом добавь колонок/строк и поправь складки. «Маска ткани» держит принт строго в пределах футболки.</p>
+
+<script>
+const ASSET = {
+  garment: 'garment.jpg',
+  mask:    'shirt-mask.png',
+  print:   'print-front.jpg'
+};
+// область футболки (из сегментации), стартовая рамка сетки
+const BBOX = {x:175, y:308, w:568, h:712};
+
+const stage = document.getElementById('stage');
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W=900, H=1200;          // нативный размер гармента
+const off = document.createElement('canvas');   // оффскрин для варпа
+const octx = off.getContext('2d');
+
+let garmentImg=null, maskImg=null, texImg=null;
+let COLS=4, ROWS=5;
+let dst=[];                 // узлы сетки в координатах гармента
+let dragIdx=-1;
+const state = {showMesh:true, opacity:1, blend:'multiply', useMask:true};
+
+function load(src){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
+
+function initGrid(){
+  dst=[];
+  for(let r=0;r<ROWS;r++){const row=[];
+    for(let c=0;c<COLS;c++){
+      row.push({x:BBOX.x + c/(COLS-1)*BBOX.w, y:BBOX.y + r/(ROWS-1)*BBOX.h});
+    } dst.push(row);}
+}
+
+function srcPt(r,c){ // координата в текстуре
+  return {x: c/(COLS-1)*texImg.width, y: r/(ROWS-1)*texImg.height};
+}
+
+// аффинное отображение src-треугольника в dst-треугольник + отрисовка текстуры
+function drawTri(g, img, s0,s1,s2, d0,d1,d2){
+  const D = s0.x*(s1.y-s2.y) + s1.x*(s2.y-s0.y) + s2.x*(s0.y-s1.y);
+  if(Math.abs(D)<1e-6) return;
+  const a=(d0.x*(s1.y-s2.y)+d1.x*(s2.y-s0.y)+d2.x*(s0.y-s1.y))/D;
+  const c=(d0.x*(s2.x-s1.x)+d1.x*(s0.x-s2.x)+d2.x*(s1.x-s0.x))/D;
+  const e=(d0.x*(s1.x*s2.y-s2.x*s1.y)+d1.x*(s2.x*s0.y-s0.x*s2.y)+d2.x*(s0.x*s1.y-s1.x*s0.y))/D;
+  const b=(d0.y*(s1.y-s2.y)+d1.y*(s2.y-s0.y)+d2.y*(s0.y-s1.y))/D;
+  const d=(d0.y*(s2.x-s1.x)+d1.y*(s0.x-s2.x)+d2.y*(s1.x-s0.x))/D;
+  const f=(d0.y*(s1.x*s2.y-s2.x*s1.y)+d1.y*(s2.x*s0.y-s0.x*s2.y)+d2.y*(s0.x*s1.y-s1.x*s0.y))/D;
+  g.save();
+  // лёгкое расширение треугольника, чтобы убрать швы
+  const cx=(d0.x+d1.x+d2.x)/3, cy=(d0.y+d1.y+d2.y)/3, k=0.6;
+  const ex=p=>({x:p.x+(p.x-cx>0?k:-k), y:p.y+(p.y-cy>0?k:-k)});
+  const E0=ex(d0),E1=ex(d1),E2=ex(d2);
+  g.beginPath();g.moveTo(E0.x,E0.y);g.lineTo(E1.x,E1.y);g.lineTo(E2.x,E2.y);g.closePath();g.clip();
+  g.setTransform(a,b,c,d,e,f);
+  g.drawImage(img,0,0);
+  g.restore();
+}
+
+function renderWarp(g){
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0,0,W,H);
+  if(!texImg) return;
+  for(let r=0;r<ROWS-1;r++){
+    for(let c=0;c<COLS-1;c++){
+      const s00=srcPt(r,c),s10=srcPt(r,c+1),s01=srcPt(r+1,c),s11=srcPt(r+1,c+1);
+      const d00=dst[r][c],d10=dst[r][c+1],d01=dst[r+1][c],d11=dst[r+1][c+1];
+      drawTri(g,texImg,s00,s10,s11,d00,d10,d11);
+      drawTri(g,texImg,s00,s11,s01,d00,d11,d01);
+    }
+  }
+  g.setTransform(1,0,0,1,0,0);
+}
+
+function compose(target, withMesh){
+  target.setTransform(1,0,0,1,0,0);
+  target.clearRect(0,0,W,H);
+  target.globalCompositeOperation='source-over';
+  target.globalAlpha=1;
+  if(garmentImg) target.drawImage(garmentImg,0,0,W,H);
+  // варп принта
+  renderWarp(octx);
+  if(state.useMask && maskImg){
+    octx.globalCompositeOperation='destination-in';
+    octx.drawImage(maskImg,0,0,W,H);
+    octx.globalCompositeOperation='source-over';
+  }
+  target.globalAlpha=state.opacity;
+  target.globalCompositeOperation=state.blend;
+  target.drawImage(off,0,0);
+  target.globalAlpha=1;
+  target.globalCompositeOperation='source-over';
+  if(withMesh && state.showMesh) drawMesh(target);
+}
+
+function drawMesh(g){
+  g.save();
+  g.strokeStyle='rgba(91,140,255,.7)';g.lineWidth=1.2;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(c<COLS-1){g.beginPath();g.moveTo(dst[r][c].x,dst[r][c].y);g.lineTo(dst[r][c+1].x,dst[r][c+1].y);g.stroke();}
+    if(r<ROWS-1){g.beginPath();g.moveTo(dst[r][c].x,dst[r][c].y);g.lineTo(dst[r+1][c].x,dst[r+1][c].y);g.stroke();}
+  }
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    g.beginPath();g.arc(dst[r][c].x,dst[r][c].y,7,0,7);
+    g.fillStyle='#5b8cff';g.fill();g.strokeStyle='#fff';g.lineWidth=2;g.stroke();
+  }
+  g.restore();
+}
+
+function draw(){ compose(ctx,true); }
+
+// --- ввод (mouse+touch) ---
+function evtPt(ev){
+  const r=cv.getBoundingClientRect();
+  const t=ev.touches?ev.touches[0]:ev;
+  return {x:(t.clientX-r.left)/r.width*W, y:(t.clientY-r.top)/r.height*H};
+}
+function pickNode(p){
+  let best=-1,bd=24*24;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const n=dst[r][c],dx=n.x-p.x,dy=n.y-p.y,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=r*COLS+c;}
+  } return best;
+}
+function down(ev){ev.preventDefault();const p=evtPt(ev);dragIdx=pickNode(p);}
+function move(ev){if(dragIdx<0)return;ev.preventDefault();const p=evtPt(ev);
+  const r=Math.floor(dragIdx/COLS),c=dragIdx%COLS;dst[r][c]={x:p.x,y:p.y};draw();}
+function up(){dragIdx=-1;}
+cv.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+cv.addEventListener('touchstart',down,{passive:false});cv.addEventListener('touchmove',move,{passive:false});window.addEventListener('touchend',up);
+
+// --- drag&drop принта ---
+['dragenter','dragover'].forEach(e=>stage.addEventListener(e,ev=>{ev.preventDefault();stage.classList.add('drag');}));
+['dragleave','drop'].forEach(e=>stage.addEventListener(e,ev=>{ev.preventDefault();stage.classList.remove('drag');}));
+stage.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)loadFile(f);});
+document.getElementById('file').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+function loadFile(f){const u=URL.createObjectURL(f);load(u).then(img=>{texImg=img;draw();});}
+
+// --- контролы ---
+document.getElementById('reset').onclick=()=>{initGrid();draw();};
+document.getElementById('showMesh').onchange=e=>{state.showMesh=e.target.checked;draw();};
+document.getElementById('opacity').oninput=e=>{state.opacity=e.target.value/100;draw();};
+document.getElementById('blend').onchange=e=>{state.blend=e.target.value;draw();};
+document.getElementById('useMask').onchange=e=>{state.useMask=e.target.checked;draw();};
+document.getElementById('cols').oninput=e=>{COLS=+e.target.value;initGrid();draw();};
+document.getElementById('rows').oninput=e=>{ROWS=+e.target.value;initGrid();draw();};
+document.getElementById('download').onclick=()=>{
+  const out=document.createElement('canvas');out.width=W;out.height=H;
+  compose(out.getContext('2d'),false);
+  out.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download='mockup-front.png';a.click();},'image/png');
+};
+
+// --- старт ---
+(async function(){
+  garmentImg=await load(ASSET.garment);
+  W=garmentImg.naturalWidth;H=garmentImg.naturalHeight;
+  cv.width=W;cv.height=H;off.width=W;off.height=H;
+  try{maskImg=await load(ASSET.mask);}catch(e){state.useMask=false;}
+  try{texImg=await load(ASSET.print);}catch(e){}
+  initGrid();draw();
+})();
+</script>
+</body>
+</html>
