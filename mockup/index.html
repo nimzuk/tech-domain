@@ -11,57 +11,44 @@
     background:radial-gradient(1000px 500px at 50% -10%,#15203a,var(--bg));color:var(--fg);
     display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px}
   h1{font-size:16px;margin:4px 0 0;font-weight:600}
-  .sub{color:var(--mut);font-size:12.5px;margin:0 0 4px;text-align:center;max-width:560px}
-  #stage{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;
-    background:#0d1017;touch-action:none;max-width:96vw}
+  .sub{color:var(--mut);font-size:12.5px;margin:0 0 4px;text-align:center;max-width:580px}
+  #stage{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#0d1017;touch-action:none;max-width:96vw}
   #stage.drag{outline:2px dashed var(--acc);outline-offset:-6px}
   canvas{display:block;width:auto;max-width:96vw;max-height:70vh;height:auto}
-  .panel{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;
-    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-width:96vw}
+  .panel{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;max-width:96vw}
   .ctrl{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mut)}
-  button{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:9px;
-    padding:8px 12px;font-size:13px;cursor:pointer}
-  button:hover{border-color:var(--acc)}
-  button.primary{background:var(--acc);border-color:var(--acc);color:#06122e;font-weight:600}
-  input[type=range]{width:110px}
-  select,input[type=file]{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
-  .hint{color:var(--mut);font-size:12px;text-align:center;max-width:560px}
+  button{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--acc)} button.primary{background:var(--acc);border-color:var(--acc);color:#06122e;font-weight:600}
+  input[type=range]{width:120px} select,input[type=file]{background:#1a2233;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+  .hint{color:var(--mut);font-size:12px;text-align:center;max-width:580px}
 </style>
 </head>
 <body>
   <h1>Мокап-редактор · сетка искажения 🔧👕</h1>
-  <p class="sub">Режим «Шахматка»: каждая ячейка подписана (A1, B2…) — тащи узлы и смотри, как ячейки искажаются по форме футболки. Когда сетка подогнана — переключи на «Принт».</p>
+  <p class="sub">Каждый узел сетки тащится — управляешь любой клеткой. Чем больше «Колонок/Строк», тем мельче клетки и точнее подгонка под складки. Подогнал — переключи «Показ» на «Принт».</p>
 
   <div id="stage"><canvas id="cv"></canvas></div>
 
   <div class="panel">
     <label class="ctrl">Показ
-      <select id="mode">
-        <option value="checker" selected>♟ Шахматка</option>
-        <option value="print">🖼 Принт</option>
-      </select>
+      <select id="mode"><option value="checker" selected>♟ Шахматка</option><option value="print">🖼 Принт</option></select>
     </label>
     <button id="reset">Сбросить сетку</button>
     <label class="ctrl">Сетка <input type="checkbox" id="showMesh" checked></label>
     <label class="ctrl">Подписи <input type="checkbox" id="showLabels" checked></label>
-    <label class="ctrl">Колонок <input type="range" id="cols" min="2" max="9" value="4"></label>
-    <label class="ctrl">Строк <input type="range" id="rows" min="2" max="10" value="5"></label>
-    <label class="ctrl">Дробление <input type="range" id="sub" min="1" max="6" value="3"></label>
+    <label class="ctrl">Колонок <input type="range" id="cols" min="2" max="18" value="9"></label>
+    <label class="ctrl">Строк <input type="range" id="rows" min="2" max="22" value="12"></label>
   </div>
   <div class="panel">
     <label class="ctrl">Непрозр. <input type="range" id="opacity" min="0" max="100" value="70"></label>
     <label class="ctrl">Режим
-      <select id="blend">
-        <option value="multiply">Multiply (ткань)</option>
-        <option value="source-over" selected>Normal</option>
-        <option value="overlay">Overlay</option>
-      </select>
+      <select id="blend"><option value="multiply">Multiply (ткань)</option><option value="source-over" selected>Normal</option><option value="overlay">Overlay</option></select>
     </label>
     <label class="ctrl">Маска ткани <input type="checkbox" id="useMask" checked></label>
     <label class="ctrl">Принт: <input type="file" id="file" accept="image/*"></label>
     <button id="download" class="primary">⬇ Скачать</button>
   </div>
-  <p class="hint">Колонок/Строк — плотность сетки. «Маска ткани» держит наложение в пределах футболки. В режиме «Принт» картинку можно перетащить файлом прямо на холст.</p>
+  <p class="hint">«Маска ткани» держит наложение строго в пределах футболки. В режиме «Принт» картинку можно перетащить файлом прямо на холст — она ляжет на ту же сетку.</p>
 
 <script>
 const ASSET={garment:'garment.jpg',mask:'shirt-mask.png',print:'print-front.jpg'};
@@ -70,13 +57,14 @@ const stage=document.getElementById('stage'),cv=document.getElementById('cv'),ct
 let W=900,H=1200;
 const off=document.createElement('canvas'),octx=off.getContext('2d');
 let garmentImg=null,maskImg=null,texImg=null;
-let COLS=4,ROWS=5,SUB=3,dst=[],dragIdx=-1;
+let COLS=9,ROWS=12,dst=[],dragIdx=-1;
 const state={mode:'checker',showMesh:true,showLabels:true,opacity:.7,blend:'source-over',useMask:true};
 
 function load(src){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
 function initGrid(){dst=[];for(let r=0;r<ROWS;r++){const row=[];for(let c=0;c<COLS;c++)row.push({x:BBOX.x+c/(COLS-1)*BBOX.w,y:BBOX.y+r/(ROWS-1)*BBOX.h});dst.push(row);}}
 function srcPt(r,c){return{x:c/(COLS-1)*texImg.width,y:r/(ROWS-1)*texImg.height};}
 const colName=c=>{let s='';c++;while(c>0){let m=(c-1)%26;s=String.fromCharCode(65+m)+s;c=(c-m-1)/26;}return s;};
+function spacing(){return Math.min(BBOX.w/(COLS-1),BBOX.h/(ROWS-1));}
 
 function drawTri(g,img,s0,s1,s2,d0,d1,d2){
   const D=s0.x*(s1.y-s2.y)+s1.x*(s2.y-s0.y)+s2.x*(s0.y-s1.y);if(Math.abs(D)<1e-6)return;
@@ -86,8 +74,7 @@ function drawTri(g,img,s0,s1,s2,d0,d1,d2){
         b=(d0.y*(s1.y-s2.y)+d1.y*(s2.y-s0.y)+d2.y*(s0.y-s1.y))/D,
         d=(d0.y*(s2.x-s1.x)+d1.y*(s0.x-s2.x)+d2.y*(s1.x-s0.x))/D,
         f=(d0.y*(s1.x*s2.y-s2.x*s1.y)+d1.y*(s2.x*s0.y-s0.x*s2.y)+d2.y*(s0.x*s1.y-s1.x*s0.y))/D;
-  g.save();const cx=(d0.x+d1.x+d2.x)/3,cy=(d0.y+d1.y+d2.y)/3,k=.6,
-    ex=p=>({x:p.x+(p.x-cx>0?k:-k),y:p.y+(p.y-cy>0?k:-k)});
+  g.save();const cx=(d0.x+d1.x+d2.x)/3,cy=(d0.y+d1.y+d2.y)/3,k=.6,ex=p=>({x:p.x+(p.x-cx>0?k:-k),y:p.y+(p.y-cy>0?k:-k)});
   const E0=ex(d0),E1=ex(d1),E2=ex(d2);
   g.beginPath();g.moveTo(E0.x,E0.y);g.lineTo(E1.x,E1.y);g.lineTo(E2.x,E2.y);g.closePath();g.clip();
   g.setTransform(a,b,c,d,e,f);g.drawImage(img,0,0);g.restore();
@@ -100,31 +87,20 @@ function renderWarp(g){
     drawTri(g,texImg,s00,s10,s11,d00,d10,d11);drawTri(g,texImg,s00,s11,s01,d00,d11,d01);
   } g.setTransform(1,0,0,1,0,0);
 }
-function bilin(r,c,u,v){
-  const P00=dst[r][c],P10=dst[r][c+1],P01=dst[r+1][c],P11=dst[r+1][c+1];
-  const ax=(1-u)*P00.x+u*P10.x,ay=(1-u)*P00.y+u*P10.y,
-        bx=(1-u)*P01.x+u*P11.x,by=(1-u)*P01.y+u*P11.y;
-  return{x:(1-v)*ax+v*bx,y:(1-v)*ay+v*by};
-}
 function renderChecker(g){
   g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,W,H);
   for(let r=0;r<ROWS-1;r++)for(let c=0;c<COLS-1;c++){
-    for(let j=0;j<SUB;j++)for(let i=0;i<SUB;i++){
-      const a=bilin(r,c,i/SUB,j/SUB),b=bilin(r,c,(i+1)/SUB,j/SUB),
-            d=bilin(r,c,(i+1)/SUB,(j+1)/SUB),e=bilin(r,c,i/SUB,(j+1)/SUB);
-      const gi=c*SUB+i,gj=r*SUB+j;
-      g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.lineTo(d.x,d.y);g.lineTo(e.x,e.y);g.closePath();
-      g.fillStyle=((gi+gj)%2)?'rgba(20,24,34,.92)':'rgba(238,240,246,.92)';g.fill();
-      if(state.showLabels){
-        const w=Math.hypot(b.x-a.x,b.y-a.y),h=Math.hypot(e.x-a.x,e.y-a.y),m=Math.min(w,h);
-        if(m>15){
-          const cx=(a.x+b.x+d.x+e.x)/4,cy=(a.y+b.y+d.y+e.y)/4,fs=Math.max(9,m*.32);
-          g.font=`600 ${fs}px -apple-system,Segoe UI,Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';
-          const lab=colName(gi)+(gj+1);
-          g.lineWidth=Math.max(1.5,fs*.18);g.strokeStyle=((gi+gj)%2)?'rgba(0,0,0,.6)':'rgba(255,255,255,.7)';
-          g.strokeText(lab,cx,cy);
-          g.fillStyle=((gi+gj)%2)?'#ffd166':'#1330c4';g.fillText(lab,cx,cy);
-        }
+    const a=dst[r][c],b=dst[r][c+1],d=dst[r+1][c+1],e=dst[r+1][c];
+    g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.lineTo(d.x,d.y);g.lineTo(e.x,e.y);g.closePath();
+    g.fillStyle=((r+c)%2)?'rgba(20,24,34,.92)':'rgba(238,240,246,.92)';g.fill();
+    if(state.showLabels){
+      const w=Math.hypot(b.x-a.x,b.y-a.y),h=Math.hypot(e.x-a.x,e.y-a.y),m=Math.min(w,h);
+      if(m>15){
+        const cx=(a.x+b.x+d.x+e.x)/4,cy=(a.y+b.y+d.y+e.y)/4,fs=Math.max(8,m*.32);
+        g.font=`600 ${fs}px -apple-system,Segoe UI,Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';
+        const lab=colName(c)+(r+1);
+        g.lineWidth=Math.max(1.4,fs*.18);g.strokeStyle=((r+c)%2)?'rgba(0,0,0,.6)':'rgba(255,255,255,.7)';g.strokeText(lab,cx,cy);
+        g.fillStyle=((r+c)%2)?'#ffd166':'#1330c4';g.fillText(lab,cx,cy);
       }
     }
   } g.setTransform(1,0,0,1,0,0);
@@ -135,25 +111,24 @@ function compose(target,withMesh){
   if(garmentImg)target.drawImage(garmentImg,0,0,W,H);
   if(state.mode==='checker')renderChecker(octx);else renderWarp(octx);
   if(state.useMask&&maskImg){octx.globalCompositeOperation='destination-in';octx.drawImage(maskImg,0,0,W,H);octx.globalCompositeOperation='source-over';}
-  target.globalAlpha=state.opacity;
-  target.globalCompositeOperation=(state.mode==='checker')?'source-over':state.blend;
-  target.drawImage(off,0,0);
-  target.globalAlpha=1;target.globalCompositeOperation='source-over';
+  target.globalAlpha=state.opacity;target.globalCompositeOperation=(state.mode==='checker')?'source-over':state.blend;
+  target.drawImage(off,0,0);target.globalAlpha=1;target.globalCompositeOperation='source-over';
   if(withMesh&&state.showMesh)drawMesh(target);
 }
 function drawMesh(g){
-  g.save();g.strokeStyle='rgba(91,140,255,.7)';g.lineWidth=1.2;
+  const rad=Math.max(3,Math.min(7,spacing()*.17));
+  g.save();g.strokeStyle='rgba(91,140,255,.55)';g.lineWidth=Math.max(.8,rad*.18);
   for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
     if(c<COLS-1){g.beginPath();g.moveTo(dst[r][c].x,dst[r][c].y);g.lineTo(dst[r][c+1].x,dst[r][c+1].y);g.stroke();}
     if(r<ROWS-1){g.beginPath();g.moveTo(dst[r][c].x,dst[r][c].y);g.lineTo(dst[r+1][c].x,dst[r+1][c].y);g.stroke();}
   }
-  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){g.beginPath();g.arc(dst[r][c].x,dst[r][c].y,7,0,7);g.fillStyle='#5b8cff';g.fill();g.strokeStyle='#fff';g.lineWidth=2;g.stroke();}
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){g.beginPath();g.arc(dst[r][c].x,dst[r][c].y,rad,0,7);g.fillStyle='#5b8cff';g.fill();g.strokeStyle='#fff';g.lineWidth=Math.max(1,rad*.3);g.stroke();}
   g.restore();
 }
 function draw(){compose(ctx,true);}
 
 function evtPt(ev){const r=cv.getBoundingClientRect(),t=ev.touches?ev.touches[0]:ev;return{x:(t.clientX-r.left)/r.width*W,y:(t.clientY-r.top)/r.height*H};}
-function pickNode(p){let best=-1,bd=26*26;for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const n=dst[r][c],dx=n.x-p.x,dy=n.y-p.y,dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=r*COLS+c;}}return best;}
+function pickNode(p){const R=Math.max(12,spacing()*.55),R2=R*R;let best=-1,bd=R2;for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const n=dst[r][c],dx=n.x-p.x,dy=n.y-p.y,dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=r*COLS+c;}}return best;}
 function down(ev){ev.preventDefault();dragIdx=pickNode(evtPt(ev));}
 function move(ev){if(dragIdx<0)return;ev.preventDefault();const p=evtPt(ev),r=Math.floor(dragIdx/COLS),c=dragIdx%COLS;dst[r][c]={x:p.x,y:p.y};draw();}
 function up(){dragIdx=-1;}
@@ -166,7 +141,7 @@ stage.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)loadFil
 document.getElementById('file').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
 function loadFile(f){const u=URL.createObjectURL(f);load(u).then(img=>{texImg=img;state.mode='print';document.getElementById('mode').value='print';draw();});}
 
-document.getElementById('mode').onchange=e=>{state.mode=e.target.value;document.getElementById('blend').value=state.mode==='checker'?'source-over':'multiply';state.blend=document.getElementById('blend').value;document.getElementById('opacity').value=state.mode==='checker'?70:100;state.opacity=document.getElementById('opacity').value/100;draw();};
+document.getElementById('mode').onchange=e=>{state.mode=e.target.value;const bl=document.getElementById('blend');bl.value=state.mode==='checker'?'source-over':'multiply';state.blend=bl.value;const op=document.getElementById('opacity');op.value=state.mode==='checker'?70:100;state.opacity=op.value/100;draw();};
 document.getElementById('reset').onclick=()=>{initGrid();draw();};
 document.getElementById('showMesh').onchange=e=>{state.showMesh=e.target.checked;draw();};
 document.getElementById('showLabels').onchange=e=>{state.showLabels=e.target.checked;draw();};
@@ -175,7 +150,6 @@ document.getElementById('blend').onchange=e=>{state.blend=e.target.value;draw();
 document.getElementById('useMask').onchange=e=>{state.useMask=e.target.checked;draw();};
 document.getElementById('cols').oninput=e=>{COLS=+e.target.value;initGrid();draw();};
 document.getElementById('rows').oninput=e=>{ROWS=+e.target.value;initGrid();draw();};
-document.getElementById('sub').oninput=e=>{SUB=+e.target.value;draw();};
 document.getElementById('download').onclick=()=>{const out=document.createElement('canvas');out.width=W;out.height=H;compose(out.getContext('2d'),false);out.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='mockup.png';a.click();},'image/png');};
 
 (async function(){
