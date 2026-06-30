@@ -46,6 +46,7 @@
     <label class="ctrl">Подписи <input type="checkbox" id="showLabels" checked></label>
     <label class="ctrl">Колонок <input type="range" id="cols" min="2" max="9" value="4"></label>
     <label class="ctrl">Строк <input type="range" id="rows" min="2" max="10" value="5"></label>
+    <label class="ctrl">Дробление <input type="range" id="sub" min="1" max="6" value="3"></label>
   </div>
   <div class="panel">
     <label class="ctrl">Непрозр. <input type="range" id="opacity" min="0" max="100" value="70"></label>
@@ -69,7 +70,7 @@ const stage=document.getElementById('stage'),cv=document.getElementById('cv'),ct
 let W=900,H=1200;
 const off=document.createElement('canvas'),octx=off.getContext('2d');
 let garmentImg=null,maskImg=null,texImg=null;
-let COLS=4,ROWS=5,dst=[],dragIdx=-1;
+let COLS=4,ROWS=5,SUB=3,dst=[],dragIdx=-1;
 const state={mode:'checker',showMesh:true,showLabels:true,opacity:.7,blend:'source-over',useMask:true};
 
 function load(src){return new Promise((res,rej)=>{const i=new Image();i.crossOrigin='anonymous';i.onload=()=>res(i);i.onerror=rej;i.src=src;});}
@@ -99,22 +100,32 @@ function renderWarp(g){
     drawTri(g,texImg,s00,s10,s11,d00,d10,d11);drawTri(g,texImg,s00,s11,s01,d00,d11,d01);
   } g.setTransform(1,0,0,1,0,0);
 }
+function bilin(r,c,u,v){
+  const P00=dst[r][c],P10=dst[r][c+1],P01=dst[r+1][c],P11=dst[r+1][c+1];
+  const ax=(1-u)*P00.x+u*P10.x,ay=(1-u)*P00.y+u*P10.y,
+        bx=(1-u)*P01.x+u*P11.x,by=(1-u)*P01.y+u*P11.y;
+  return{x:(1-v)*ax+v*bx,y:(1-v)*ay+v*by};
+}
 function renderChecker(g){
   g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,W,H);
   for(let r=0;r<ROWS-1;r++)for(let c=0;c<COLS-1;c++){
-    const a=dst[r][c],b=dst[r][c+1],d=dst[r+1][c+1],e=dst[r+1][c];
-    g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.lineTo(d.x,d.y);g.lineTo(e.x,e.y);g.closePath();
-    g.fillStyle=((r+c)%2)?'rgba(20,24,34,.92)':'rgba(238,240,246,.92)';g.fill();
-    if(state.showLabels){
-      const cx=(a.x+b.x+d.x+e.x)/4,cy=(a.y+b.y+d.y+e.y)/4;
-      const w=Math.hypot(b.x-a.x,b.y-a.y),h=Math.hypot(e.x-a.x,e.y-a.y);
-      const fs=Math.max(11,Math.min(w,h)*.34);
-      g.font=`600 ${fs}px -apple-system,Segoe UI,Roboto,sans-serif`;
-      g.textAlign='center';g.textBaseline='middle';
-      const lab=colName(c)+(r+1);
-      g.lineWidth=Math.max(2,fs*.18);g.strokeStyle=((r+c)%2)?'rgba(0,0,0,.6)':'rgba(255,255,255,.7)';
-      g.strokeText(lab,cx,cy);
-      g.fillStyle=((r+c)%2)?'#ffd166':'#1330c4';g.fillText(lab,cx,cy);
+    for(let j=0;j<SUB;j++)for(let i=0;i<SUB;i++){
+      const a=bilin(r,c,i/SUB,j/SUB),b=bilin(r,c,(i+1)/SUB,j/SUB),
+            d=bilin(r,c,(i+1)/SUB,(j+1)/SUB),e=bilin(r,c,i/SUB,(j+1)/SUB);
+      const gi=c*SUB+i,gj=r*SUB+j;
+      g.beginPath();g.moveTo(a.x,a.y);g.lineTo(b.x,b.y);g.lineTo(d.x,d.y);g.lineTo(e.x,e.y);g.closePath();
+      g.fillStyle=((gi+gj)%2)?'rgba(20,24,34,.92)':'rgba(238,240,246,.92)';g.fill();
+      if(state.showLabels){
+        const w=Math.hypot(b.x-a.x,b.y-a.y),h=Math.hypot(e.x-a.x,e.y-a.y),m=Math.min(w,h);
+        if(m>15){
+          const cx=(a.x+b.x+d.x+e.x)/4,cy=(a.y+b.y+d.y+e.y)/4,fs=Math.max(9,m*.32);
+          g.font=`600 ${fs}px -apple-system,Segoe UI,Roboto,sans-serif`;g.textAlign='center';g.textBaseline='middle';
+          const lab=colName(gi)+(gj+1);
+          g.lineWidth=Math.max(1.5,fs*.18);g.strokeStyle=((gi+gj)%2)?'rgba(0,0,0,.6)':'rgba(255,255,255,.7)';
+          g.strokeText(lab,cx,cy);
+          g.fillStyle=((gi+gj)%2)?'#ffd166':'#1330c4';g.fillText(lab,cx,cy);
+        }
+      }
     }
   } g.setTransform(1,0,0,1,0,0);
 }
@@ -164,6 +175,7 @@ document.getElementById('blend').onchange=e=>{state.blend=e.target.value;draw();
 document.getElementById('useMask').onchange=e=>{state.useMask=e.target.checked;draw();};
 document.getElementById('cols').oninput=e=>{COLS=+e.target.value;initGrid();draw();};
 document.getElementById('rows').oninput=e=>{ROWS=+e.target.value;initGrid();draw();};
+document.getElementById('sub').oninput=e=>{SUB=+e.target.value;draw();};
 document.getElementById('download').onclick=()=>{const out=document.createElement('canvas');out.width=W;out.height=H;compose(out.getContext('2d'),false);out.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='mockup.png';a.click();},'image/png');};
 
 (async function(){
